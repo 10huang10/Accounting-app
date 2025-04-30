@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>記帳網頁</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: sans-serif; margin: 20px; }
+    .navbar { display: flex; gap: 20px; margin-bottom: 20px; }
+    .input-area, .progress, .chart-area, .record-list, .goal-area { margin-bottom: 30px; }
+    .icon-category { width: 40px; height: 40px; margin-right: 10px; cursor: pointer; }
+    .progress-bar { background: #eee; border-radius: 20px; overflow: hidden; width: 300px; }
+    .progress-fill { background: green; height: 20px; width: 0%; transition: width 0.3s; }
+    #login-screen { text-align: center; margin-top: 100px; }
+    #main-screen { display: none; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 8px; border: 1px solid #ccc; text-align: center; }
+    .delete-btn { cursor: pointer; color: red; }
+  </style>
+</head>
+<body>
+
+<!-- 登入畫面 -->
+<div id="login-screen">
+  <h2>請先登入</h2>
+  <label>帳號：<input type="text" id="username"></label><br><br>
+  <button onclick="login()">登入</button>
+</div>
+
+<!-- 主畫面 -->
+<div id="main-screen">
+  <!-- 選單列 -->
+  <div class="navbar">
+    <button>設定</button>
+    <button>多幣別管理</button>
+    <button>通知</button>
+    <button>明細</button>
+    <button>圖表分析
+      
+    </button>
+    <img src="avatar.png" alt="頭像" width="40">
+  </div>
+
+  <!-- 儲蓄目標設定區 -->
+  <div class="goal-area">
+    <label>設定本月儲蓄目標金額（元）：</label>
+    <input type="number" id="goalInput">
+    <button onclick="setGoal()">儲存目標</button>
+  </div>
+
+  <!-- 消費輸入區 -->
+  <div class="input-area">
+    <label>日期：<input type="date" id="date"></label><br><br>
+    <label>類別：</label>
+    <div>
+      <img class="icon-category" src="breakfast.png" title="早餐" onclick="selectCategory('早餐')">
+      <img class="icon-category" src="lunch.png" title="午餐" onclick="selectCategory('午餐')">
+      <img class="icon-category" src="transport.png" title="交通" onclick="selectCategory('交通')">
+      <img class="icon-category" src="entertainment.png" title="娛樂" onclick="selectCategory('娛樂')">
+    </div><br>
+    <input type="hidden" id="category">
+    <label>金額：<input type="number" id="amount"> 元</label><br><br>
+    <label>細項：<input type="text" id="note"></label><br><br>
+    <button onclick="addExpense()">新增消費</button>
+  </div>
+
+  <!-- 儲蓄目標進度條 -->
+  <div class="progress">
+    <label>儲蓄進度：</label>
+    <div class="progress-bar">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+  </div>
+
+  <!-- 圓餅圖 -->
+  <div class="chart-area">
+    <canvas id="spendingChart" width="400" height="400"></canvas>
+  </div>
+
+  <!-- 消費紀錄列表 -->
+  <div class="record-list">
+    <h3>消費紀錄</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>日期</th><th>類別</th><th>金額</th><th>細項</th><th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="recordTable"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  // 登入功能
+  function login() {
+    const username = document.getElementById('username').value;
+    if (username.trim() !== '') {
+      localStorage.setItem('account', username);
+      showMain();
+    } else {
+      alert('請輸入帳號');
+    }
+  }
+
+  function showMain() {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('main-screen').style.display = 'block';
+    document.getElementById('goalInput').value = getGoal();
+    render();
+  }
+
+  if (localStorage.getItem('account')) {
+    showMain();
+  }
+
+  function selectCategory(cat) {
+    document.getElementById('category').value = cat;
+    alert('已選擇：' + cat);
+  }
+
+  function addExpense() {
+    const date = document.getElementById('date').value;
+    const category = document.getElementById('category').value;
+    const amount = Number(document.getElementById('amount').value);
+    const note = document.getElementById('note').value;
+
+    if (!date || !category || !amount) {
+      alert('請填寫完整消費資料');
+      return;
+    }
+
+    let records = JSON.parse(localStorage.getItem('records') || '[]');
+    records.push({ date, category, amount, note });
+    localStorage.setItem('records', JSON.stringify(records));
+    render();
+    alert('已新增');
+  }
+
+  function render() {
+    updateTable();
+    updateChart();
+    updateProgress();
+  }
+
+  function updateTable() {
+    const records = JSON.parse(localStorage.getItem('records') || '[]');
+    const table = document.getElementById('recordTable');
+    table.innerHTML = '';
+    records.forEach((r, i) => {
+      table.innerHTML += `
+        <tr>
+          <td>${r.date}</td>
+          <td>${r.category}</td>
+          <td><input value="${r.amount}" onchange="editAmount(${i}, this.value)"></td>
+          <td><input value="${r.note}" onchange="editNote(${i}, this.value)"></td>
+          <td><span class="delete-btn" onclick="deleteRecord(${i})">刪除</span></td>
+        </tr>`;
+    });
+  }
+
+  function editAmount(index, val) {
+    let records = JSON.parse(localStorage.getItem('records') || '[]');
+    records[index].amount = Number(val);
+    localStorage.setItem('records', JSON.stringify(records));
+    render();
+  }
+
+  function editNote(index, val) {
+    let records = JSON.parse(localStorage.getItem('records') || '[]');
+    records[index].note = val;
+    localStorage.setItem('records', JSON.stringify(records));
+    render();
+  }
+
+  function deleteRecord(index) {
+    let records = JSON.parse(localStorage.getItem('records') || '[]');
+    if (confirm('確定要刪除這筆紀錄嗎？')) {
+      records.splice(index, 1);
+      localStorage.setItem('records', JSON.stringify(records));
+      render();
+    }
+  }
+
+  function updateChart() {
+    const records = JSON.parse(localStorage.getItem('records') || '[]');
+    let categoryTotals = {};
+    records.forEach(r => {
+      categoryTotals[r.category] = (categoryTotals[r.category] || 0) + r.amount;
+    });
+
+    const labels = Object.keys(categoryTotals);
+    const values = Object.values(categoryTotals);
+
+    if (window.myChart) window.myChart.destroy();
+    const ctx = document.getElementById('spendingChart').getContext('2d');
+    window.myChart = new Chart(ctx, {
+      type: 'pie',
+      data: {
+        labels: labels,
+        datasets: [{
+          data: values,
+          backgroundColor: ['#FFD700', '#FF6347', '#87CEFA', '#90EE90']
+        }]
+      }
+    });
+  }
+
+  function updateProgress() {
+    const goal = getGoal();
+    const records = JSON.parse(localStorage.getItem('records') || '[]');
+    const totalSpent = records.reduce((sum, r) => sum + r.amount, 0);
+    const saved = goal - totalSpent;
+    const percent = Math.max(0, Math.min(100, (saved / goal) * 100));
+    document.getElementById('progressFill').style.width = percent + '%';
+  }
+
+  function setGoal() {
+    const val = Number(document.getElementById('goalInput').value);
+    if (val > 0) {
+      localStorage.setItem('goal', val);
+      updateProgress();
+    } else {
+      alert('請輸入正確的金額');
+    }
+  }
+
+  function getGoal() {
+    return Number(localStorage.getItem('goal') || 10000);
+  }
+</script>
+
+</body>
+</html>
